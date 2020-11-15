@@ -82,10 +82,11 @@ class QuerySetSourceManager(RawSourceManager):
         return r
 
     def __call__(self, source_queryset):
-        queryset_fields = [
-            f.column for f in source_queryset.model._meta.fields]
-        queryset_fields += list(source_queryset.query.annotations.keys())
-
+        queryset_fields = set([
+            *source_queryset.query.values_select,
+            *source_queryset.query.annotations.keys()
+        ])
+        
         model_fields = [f.column for f in self.model._meta.fields]
 
         for field in set(model_fields) - set(queryset_fields):
