@@ -6,7 +6,7 @@ os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setup(
     name='django-dynamic-source-models',
-    version='0.1.3',
+    version='0.1.4',
     packages=find_packages(),
     setup_requires=['setuptools-markdown'],
     include_package_data=True,

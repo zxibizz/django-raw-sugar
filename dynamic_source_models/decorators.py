@@ -15,16 +15,20 @@ class _classproperty:
 
 def _property_source_queryset(func):
     def inner_wrapper(cls, *args, **kwargs):
-        qs = func(cls, *args, **kwargs)
-        return cls.from_queryset(qs)
+        result = func(cls, *args, **kwargs)
+        if not isinstance(result, tuple):
+            result = (result,)
+        return cls.from_queryset(*result)
     return _classproperty(inner_wrapper)
 
 
 def _callable_source_queryset(func):
     def wrapper(*args, **kwargs):
         def inner_wrapper(cls, *args, **kwargs):
-            qs = func(cls, *args, **kwargs)
-            return cls.from_queryset(qs)
+            result = func(cls, *args, **kwargs)
+            if not isinstance(result, tuple):
+                result = (result,)
+            return cls.from_queryset(*result)
         return inner_wrapper(*args, **kwargs)
     return classmethod(wrapper)
 
@@ -40,22 +44,20 @@ def source_queryset(callable=False):
 
 def _property_source_raw(func):
     def inner_wrapper(cls, *args, **kwargs):
-        try:
-            raw_sql, params = func(cls, *args, **kwargs)
-        except ValueError:
-            raise ValueError('Source raw method must return tuple with raw_sql and params')
-        return cls.from_raw(raw_sql, params)
+        result = func(cls, *args, **kwargs)
+        if not isinstance(result, tuple):
+            result = (result,)
+        return cls.from_raw(*result)
     return _classproperty(inner_wrapper)
 
 
 def _callable_source_raw(func):
     def wrapper(*args, **kwargs):
         def inner_wrapper(cls, *args, **kwargs):
-            try:
-                raw_sql, params = func(cls, *args, **kwargs)
-            except ValueError:
-                raise ValueError('Source raw method must return tuple with raw_sql and params')
-            return cls.from_raw(raw_sql, params)
+            result = func(cls, *args, **kwargs)
+            if not isinstance(result, tuple):
+                result = (result,)
+            return cls.from_raw(*result)
         return inner_wrapper(*args, **kwargs)
     return classmethod(wrapper)
 
