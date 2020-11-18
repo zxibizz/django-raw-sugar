@@ -1,6 +1,6 @@
 # django-facade-model
 
-A package that provides functionality to create a django models with dynamic source (either from raw sql or django queryset)
+Turns your raw sql into a QuerySet.
 
 ## Installation
 
@@ -8,100 +8,88 @@ Install using `pip`...
 
     pip install django-facade-model
 
-## Quick start
+## How to use
 
-First of all you will need existing models in your application:
+Inherit your models from `FacadeModel` instead of `models.Model` (or `ReadOnlyFacadeModel` if you don't want your model to be created in database):
 
 ```python
+# models.py
 from django.db import models
 
-class Product(models.Model):
-    name = models.TextField()
+from facade_model.models import FacadeModel, ReadOnlyFacadeModel
 
-class Warehouse(models.Model):
+class MySimpleModel(FacadeModel): # or ReadOnlyFacadeModel
     name = models.TextField()
+    number = models.IntegerField()
+    source = models.ForeignKey(AnotherSimpleModel, models.DO_NOTHING)
 
-class StockTransaction(models.Model):
-    outbound = models.BooleanField()
-    product = models.ForeignKey(Product, models.PROTECT)
-    warehouse = models.ForeignKey(Warehouse, models.PROTECT)
-    quantity = models.IntegerField()
+# some other file
+from .models import MySimpleModel
+
+queryset = MySimpleModel.from_raw(
+    'SELECT Null as id, "my str" as name, 111 as number, 1 as source_id')
 ```
 
-Create a facade source model. Attention: facade model cannot be accessed through RelatedManager, and it worth it to set `related_name='+'` for the ForeighKey fields
+You can treat the result queryset as a regular `models.QuerySet`:
+
+```python
+queryset = queryset.filter(number__gte=10)\
+    .exclude(number__gte=1000)\
+    .filter(name__contains='s')\
+    .order_by('number')\
+    .select_related('source')
+print(queryset[0].name) # "my str"
+```
+
+You can define a model manager that uses your raw sql to query result:
 
 ```python
 from facade_model.models import FacadeModel
+from facade_model.decorators import manager_from_raw
 
-class StockBalance(FacadeModel):
-    product = models.ForeignKey(Product, models.PROTECT, related_name='+')
-    warehouse = models.ForeignKey(Warehouse, models.PROTECT, related_name='+')
-    balance = models.IntegerField(default=0)
-```
-
-Query by providing a source queryset
-
-```python
-manager_from_queryset = StockTransaction.objects\
-    .values('product', 'warehouse')\
-    .annotate(balance=Sum(
-        Case(
-            When(outbound=False,
-                then=F('quantity')*-1),
-                default=F('quantity')
-        ), 
-        output_field=IntegerField())
-    ).all()
-
-qs = StockBalance.from_queryset(manager_from_queryset).all()
-qs = qs.select_related('product')
-qs = qs.filter(quantity__gte=10).exclude(warehouse__id=666)
-```
-
-Query by providing a raw sql
-
-```python
-qs = StockBalance.from_raw('SELECT Null as id, Null as product_id, 1 as warehouse_id, %s as balance', [123]).all()
-```
-
-Add sources in the model
-
-```python
-from facade_model.models import FacadeModel
-from facade_model.decorators import manager_from_queryset, manager_from_raw
-
-class StockBalance(FacadeModel):
-    product = models.ForeignKey(Product, models.PROTECT, related_name='+')
-    warehouse = models.ForeignKey(Warehouse, models.PROTECT, related_name='+')
-    quantity = models.IntegerField(default=0)
+class MySimpleModel(FacadeModel):
+    name = models.TextField()
+    number = models.IntegerField()
+    source = models.ForeignKey(AnotherSimpleModel, models.DO_NOTHING)
 
     @manager_from_raw
     def my_raw_source(cls):
-        raw_sql = 'SELECT Null as id, Null as product_id, Null as warehouse_id, %s as quantity'
-        params = [123]
-        return raw_sql, params
-
-    @manager_from_queryset(is_method=True)
-    def my_queryset_source(cls, group_by=None):
-        if group_by is None:
-            group_by = ['product', 'warehouse']
-
-        qs = StockTransaction.objects\
-            .values('product', 'warehouse')\
-            .annotate(_quantity=Sum(
-                Case(
-                    When(outbound=False,
-                        then=F('quantity')*-1),
-                        default=F('quantity')
-                ), 
-                output_field=IntegerField())
-            ).all()
-        return qs
+        return 'SELECT Null as id, "my str" as name, 111 as number, 1 as source_id'
 ```
 
-You can use sources as usual model managers
+And then use it as like as any another `models.QuerySet`:
 
 ```python
-StockBalance.my_raw_source.all().filter(quantity__gte=12)
-StockBalance.my_queryset_source(group_by=['product']).exclude(product_id__lt=10)
+from .models import MySimpleModel
+
+queryset = MySimpleModel.my_raw_source\
+    .filter(number__gte=10)\
+    .exclude(number__gte=1000)\
+    .filter(name__contains='s')\
+    .order_by('number')\
+    .select_related('source')
+print(queryset[0].name) # "my str"
+```
+
+You can do even more, and pass extra parameters to the manager:
+
+```python
+
+from facade_model.models import FacadeModel
+from facade_model.decorators import manager_from_raw
+
+class MySimpleModel(FacadeModel):
+    name = models.TextField()
+    number = models.IntegerField()
+    source = models.ForeignKey(AnotherSimpleModel, models.DO_NOTHING)
+
+    @manager_from_raw(is_method=True)
+    def my_callable_raw_source(cls, id='Null', name="", number=0):
+        return f'SELECT {id} as id, "{name}" as name, {number} as number, 1 as source_id'
+
+# some other file
+from .models import MySimpleModel
+
+queryset = MySimpleModel.my_callable_raw_source(name='my param').all()
+print(queryset[0].name) # "my param"
 ```
