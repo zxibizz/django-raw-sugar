@@ -1,9 +1,9 @@
 from django.db import models, connection
 
 
-class DynamicSourceQuery(models.sql.Query):
+class FacadeModelQuery(models.sql.Query):
     def __init__(self, *args, source_raw=None, source_params=None,
-            source_translations=None, **kwargs):
+                 source_translations=None, **kwargs):
         self._source_raw = source_raw
         self._source_params = source_params or []
         self._source_translations = source_translations or {}
@@ -34,21 +34,21 @@ class DynamicSourceQuery(models.sql.Query):
         return compiler
 
 
-class DynamicSourceQuerySet(models.QuerySet):
-    def __init__(self, *args, query=None, source_raw=None, 
-            source_params=[], source_translations=None, **kwargs) -> None:
+class FacadeModelQuerySet(models.QuerySet):
+    def __init__(self, *args, query=None, source_raw=None,
+                 source_params=[], source_translations=None, **kwargs) -> None:
         empty_query = query is None
         r = super().__init__(*args, query=query, **kwargs)
         if empty_query:
-            self.query = DynamicSourceQuery(
-                self.model, 
-                source_raw=source_raw, 
+            self.query = FacadeModelQuery(
+                self.model,
+                source_raw=source_raw,
                 source_params=source_params,
                 source_translations=source_translations)
         return r
 
 
-class RawSourceManager(models.Manager):
+class RawFacadeManager(models.Manager):
     def __call__(self, raw_query, params=None, translations=None):
         self._source_raw = raw_query
         self._source_params = params
@@ -59,7 +59,7 @@ class RawSourceManager(models.Manager):
         if self._source_raw is None:
             raise Exception('Source raw was not provided!')
 
-        return DynamicSourceQuerySet(
+        return FacadeModelQuerySet(
             self.model, using=self._db,
             source_raw=self._source_raw,
             source_params=self._source_params,
@@ -82,19 +82,22 @@ class RawSourceManager(models.Manager):
         raise NotImplementedError
 
 
-class QuerySetSourceManager(RawSourceManager):
+class QuerysetFacadeManager(RawFacadeManager):
     def __call__(self, queryset, translations=None):
         queryset_fields = list(queryset.query.annotations.keys())
         if translations:
             queryset_fields += [translations[i] for i in translations]
-        for field_name in queryset.query.values_select:
-            for field in queryset.model._meta.fields:
-                if field.name == field_name:
-                    queryset_fields.append(field.column)
-                    break
-            else:
-                queryset_fields.append(field_name)
-        
+        if len(queryset.query.values_select) > 0:
+            for field_name in queryset.query.values_select:
+                for field in queryset.model._meta.fields:
+                    if field.name == field_name:
+                        queryset_fields.append(field.column)
+                        break
+                else:
+                    queryset_fields.append(field_name)
+        else:
+            queryset_fields += [field.column for field in queryset.model._meta.fields]
+
         model_fields = [f.column for f in self.model._meta.fields]
 
         for field in set(model_fields) - set(queryset_fields):
@@ -115,9 +118,9 @@ class QuerySetSourceManager(RawSourceManager):
                 return field
 
 
-class DynamicSourceModel(models.Model):
-    from_raw = RawSourceManager()
-    from_queryset = QuerySetSourceManager()
+class FacadeModel(models.Model):
+    from_raw = RawFacadeManager()
+    from_queryset = QuerysetFacadeManager()
 
     def delete(self, *args, **kwargs):
         raise NotImplementedError

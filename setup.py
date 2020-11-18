@@ -5,14 +5,14 @@ from setuptools import setup, find_packages
 os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setup(
-    name='django-dynamic-source-models',
-    version='0.1.4',
+    name='django-facade-model',
+    version='0.1.5',
     packages=find_packages(),
     setup_requires=['setuptools-markdown'],
     include_package_data=True,
     license='MIT',
     description='A package that provides functionality to create a django models with dynamic source (either from raw sql or django queryset)',
-    url='https://github.com/zxibizz/django-dynamic-source-models',
+    url='https://github.com/zxibizz/django-facade-model',
     author='Roman Lee',
     author_email='romanlee1996@gmail.com',
     classifiers=[

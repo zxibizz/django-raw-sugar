@@ -1,4 +1,4 @@
-# django-dynamic-source-models
+# django-facade-model
 
 A package that provides functionality to create a django models with dynamic source (either from raw sql or django queryset)
 
@@ -6,8 +6,7 @@ A package that provides functionality to create a django models with dynamic sou
 
 Install using `pip`...
 
-    pip install django-dynamic-source-models
-
+    pip install django-facade-model
 
 ## Quick start
 
@@ -29,12 +28,12 @@ class StockTransaction(models.Model):
     quantity = models.IntegerField()
 ```
 
-Create a dynamic source model. Attention: dynamic models cannot be accessed through RelatedManager, and it worth it to set `related_name='+'` for the ForeighKey fields
+Create a facade source model. Attention: facade model cannot be accessed through RelatedManager, and it worth it to set `related_name='+'` for the ForeighKey fields
 
 ```python
-from dynamic_source_models.models import DynamicSourceModel
+from facade_model.models import FacadeModel
 
-class StockBalance(DynamicSourceModel):
+class StockBalance(FacadeModel):
     product = models.ForeignKey(Product, models.PROTECT, related_name='+')
     warehouse = models.ForeignKey(Warehouse, models.PROTECT, related_name='+')
     balance = models.IntegerField(default=0)
@@ -43,7 +42,7 @@ class StockBalance(DynamicSourceModel):
 Query by providing a source queryset
 
 ```python
-source_queryset = StockTransaction.objects\
+manager_from_queryset = StockTransaction.objects\
     .values('product', 'warehouse')\
     .annotate(balance=Sum(
         Case(
@@ -54,7 +53,7 @@ source_queryset = StockTransaction.objects\
         output_field=IntegerField())
     ).all()
 
-qs = StockBalance.from_queryset(source_queryset).all()
+qs = StockBalance.from_queryset(manager_from_queryset).all()
 qs = qs.select_related('product')
 qs = qs.filter(quantity__gte=10).exclude(warehouse__id=666)
 ```
@@ -68,21 +67,21 @@ qs = StockBalance.from_raw('SELECT Null as id, Null as product_id, 1 as warehous
 Add sources in the model
 
 ```python
-from dynamic_source_models.models import DynamicSourceModel
-from dynamic_source_models.decorators import source_queryset, source_raw
+from facade_model.models import FacadeModel
+from facade_model.decorators import manager_from_queryset, manager_from_raw
 
-class StockBalance(DynamicSourceModel):
+class StockBalance(FacadeModel):
     product = models.ForeignKey(Product, models.PROTECT, related_name='+')
     warehouse = models.ForeignKey(Warehouse, models.PROTECT, related_name='+')
     quantity = models.IntegerField(default=0)
 
-    @source_raw
+    @manager_from_raw
     def my_raw_source(cls):
         raw_sql = 'SELECT Null as id, Null as product_id, Null as warehouse_id, %s as quantity'
         params = [123]
         return raw_sql, params
 
-    @source_queryset(callable=True)
+    @manager_from_queryset(is_method=True)
     def my_queryset_source(cls, group_by=None):
         if group_by is None:
             group_by = ['product', 'warehouse']

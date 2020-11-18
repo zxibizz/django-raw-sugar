@@ -13,7 +13,7 @@ class _classproperty:
         return self
 
 
-def _property_source_queryset(func):
+def _property_manager_from_queryset(func):
     def inner_wrapper(cls, *args, **kwargs):
         result = func(cls, *args, **kwargs)
         if not isinstance(result, tuple):
@@ -22,7 +22,7 @@ def _property_source_queryset(func):
     return _classproperty(inner_wrapper)
 
 
-def _callable_source_queryset(func):
+def _callable_manager_from_queryset(func):
     def wrapper(*args, **kwargs):
         def inner_wrapper(cls, *args, **kwargs):
             result = func(cls, *args, **kwargs)
@@ -33,16 +33,16 @@ def _callable_source_queryset(func):
     return classmethod(wrapper)
 
 
-def source_queryset(callable=False):
-    if isinstance(callable, types.FunctionType):
-        return _property_source_queryset(callable)
-    if callable:
-        return _callable_source_queryset
+def manager_from_queryset(is_method=False):
+    if callable(is_method):
+        return _property_manager_from_queryset(is_method)
+    if is_method:
+        return _callable_manager_from_queryset
     else:
-        return _property_source_queryset
+        return _property_manager_from_queryset
 
 
-def _property_source_raw(func):
+def _property_manager_from_raw(func):
     def inner_wrapper(cls, *args, **kwargs):
         result = func(cls, *args, **kwargs)
         if not isinstance(result, tuple):
@@ -51,7 +51,7 @@ def _property_source_raw(func):
     return _classproperty(inner_wrapper)
 
 
-def _callable_source_raw(func):
+def _callable_manager_from_raw(func):
     def wrapper(*args, **kwargs):
         def inner_wrapper(cls, *args, **kwargs):
             result = func(cls, *args, **kwargs)
@@ -62,10 +62,10 @@ def _callable_source_raw(func):
     return classmethod(wrapper)
 
 
-def source_raw(callable=False):
-    if isinstance(callable, types.FunctionType):
-        return _property_source_raw(callable)
-    if callable:
-        return _callable_source_raw
+def manager_from_raw(is_method=False):
+    if callable(is_method):
+        return _property_manager_from_raw(is_method)
+    if is_method:
+        return _callable_manager_from_raw
     else:
-        return _property_source_raw
+        return _property_manager_from_raw
