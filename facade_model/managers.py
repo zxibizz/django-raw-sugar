@@ -1,5 +1,4 @@
 from django.db import models, connection
-import sqlparse
 
 
 class FacadeModelQuery(models.sql.Query):
@@ -24,9 +23,10 @@ class FacadeModelQuery(models.sql.Query):
                 sql_as = ''
                 [ sql_table_name, sql_field_name ] = sql.split('.')
                 for translation_name in self._source_translations:
-                    if f'"{translation_name}"' == sql_field_name:
-                        sql_as = f' as {sql_field_name}'
-                        sql_field_name = f'"{self._source_translations[translation_name]}"'
+                    if '"{}"'.format(translation_name) == sql_field_name:
+                        sql_as = ' as {}'.format(sql_field_name)
+                        sql_field_name = '"{}"'.format(
+                            self._source_translations[translation_name])
                 sql = '.'.join([sql_table_name, sql_field_name])
                 sql += sql_as
 
@@ -39,7 +39,8 @@ class FacadeModelQuery(models.sql.Query):
         get_from_clause_method = compiler.get_from_clause
         def get_from_clause_wrapper(*args, **kwargs):
             result, params = get_from_clause_method(*args, **kwargs)
-            result[0] = f'({self._source_raw}) as {self.model._meta.db_table}'
+            result[0] = '({}) as {}'.format(
+                self._source_raw, self.model._meta.db_table)
             params = tuple(self._source_params) + tuple(params)
             return result, params
         compiler.get_from_clause = get_from_clause_wrapper
@@ -117,7 +118,7 @@ class QuerysetFacadeManager(RawFacadeManager):
 
         for field in set(model_fields) - set(queryset_fields):
             queryset = queryset.annotate(
-                **{f'{field}': models.Value(None, self._get_model_field(field))})
+                **{field: models.Value(None, self._get_model_field(field))})
 
         source_raw, source_params = queryset.query.as_sql(
             connection=connection, compiler=None)
