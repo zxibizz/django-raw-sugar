@@ -93,3 +93,8 @@ from .models import MySimpleModel
 queryset = MySimpleModel.my_callable_raw_source(name='my param').all()
 print(queryset[0].name) # "my param"
 ```
+
+## Restrictions
+There are some restrictions that are put on the raw sql you provide:
+- The result of a query should provide all field that the target model has in database, including primary key (`id` in most situations).
+- The result of a query should be a table (if you have a sql view or a table function in your database, you should provide something like `Select * from my_view`, not just `my_view`)
