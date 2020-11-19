@@ -1,4 +1,5 @@
 from django.db import models, connection
+import sqlparse
 
 
 class FacadeModelQuery(models.sql.Query):
@@ -7,29 +8,41 @@ class FacadeModelQuery(models.sql.Query):
         self._source_raw = source_raw
         self._source_params = source_params or []
         self._source_translations = source_translations or {}
-        r = super().__init__(*args, **kwargs)
-        return r
+
+        return super().__init__(*args, **kwargs)
 
     def get_compiler(self, *args, **kwargs):
         compiler = super().get_compiler(*args, **kwargs)
 
-        get_from_clause_method = compiler.get_from_clause
+        get_select_method = compiler.get_select
+        def get_select_wrapper(*args, **kwargs):
+            ret, klass_info, annotations = get_select_method(*args, **kwargs)
+            new_ret = []
+            for ret_data in ret:
+                col, (sql, params), alias = ret_data
+                
+                sql_as = ''
+                [ sql_table_name, sql_field_name ] = sql.split('.')
+                for translation_name in self._source_translations:
+                    if f'"{translation_name}"' == sql_field_name:
+                        sql_as = f' as {sql_field_name}'
+                        sql_field_name = f'"{self._source_translations[translation_name]}"'
+                sql = '.'.join([sql_table_name, sql_field_name])
+                sql += sql_as
 
-        def wrapper(*args, **kwargs):
+                ret_data = col, (sql, params), alias
+                new_ret.append(ret_data)
+
+            return new_ret, klass_info, annotations
+        compiler.get_select = get_select_wrapper
+
+        get_from_clause_method = compiler.get_from_clause
+        def get_from_clause_wrapper(*args, **kwargs):
             result, params = get_from_clause_method(*args, **kwargs)
-            assert result[0] == f'"{self.model._meta.db_table}"'
-            if self._source_translations:
-                from_fields = ','.join([
-                    f'temp.{t} as {tt}' for t, tt in self._source_translations.items()
-                ])
-                from_table = f'(SELECT *, {from_fields} FROM ({self._source_raw}) as temp) as {self.model._meta.db_table}'
-            else:
-                from_table = f'({self._source_raw}) as {self.model._meta.db_table}'
-            result[0] = from_table
+            result[0] = f'({self._source_raw}) as {self.model._meta.db_table}'
             params = tuple(self._source_params) + tuple(params)
             return result, params
-
-        compiler.get_from_clause = wrapper
+        compiler.get_from_clause = get_from_clause_wrapper
 
         return compiler
 
