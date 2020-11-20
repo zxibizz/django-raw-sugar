@@ -1,14 +1,10 @@
-from django.db import models, connection
+from django.db import models
+from .sources import FromRaw, FromQuerySet
 
 
-class FacadeModelQuery(models.sql.Query):
-    def __init__(self, *args, source_raw=None,
-                 source_params=None, source_translations=None,
-                 source_null_fields=None, **kwargs):
-        self._source_raw = source_raw
-        self._source_params = source_params or []
-        self._source_translations = source_translations or {}
-        self._source_null_fields = source_null_fields or []
+class RawSugarQuery(models.sql.Query):
+    def __init__(self, *args, _source=None, **kwargs):
+        self._source = _source
 
         return super().__init__(*args, **kwargs)
 
@@ -16,7 +12,6 @@ class FacadeModelQuery(models.sql.Query):
         compiler = super().get_compiler(*args, **kwargs)
 
         get_select_method = compiler.get_select
-
         def get_select_wrapper(*args, **kwargs):
             ret, klass_info, annotations = get_select_method(*args, **kwargs)
             new_ret = []
@@ -24,14 +19,14 @@ class FacadeModelQuery(models.sql.Query):
                 col, (sql, params), alias = ret_data
 
                 [sql_table_name, sql_field_name] = sql.split('.')
-                for translation_name in self._source_translations:
-                    translation_source = self._source_translations[translation_name]
+                for translation_name in self._source.translations:
+                    translation_source = self._source.translations[translation_name]
                     if '"{}"'.format(translation_source) == sql_field_name:
                         sql_field_name = '"{}"'.format(translation_source)
                         sql = '.'.join([sql_table_name, translation_name])
                         sql += ' as {}'.format(sql_field_name)
                         break
-                for null_field in self._source_null_fields:
+                for null_field in self._source.null_fields:
                     if '"{}"'.format(null_field) == sql_field_name:
                         sql = 'Null as {}'.format(sql_field_name)
                         break
@@ -43,101 +38,64 @@ class FacadeModelQuery(models.sql.Query):
         compiler.get_select = get_select_wrapper
 
         get_from_clause_method = compiler.get_from_clause
-
         def get_from_clause_wrapper(*args, **kwargs):
             result, params = get_from_clause_method(*args, **kwargs)
-            result[0] = '({}) as {}'.format(
-                self._source_raw, self.model._meta.db_table)
-            params = tuple(self._source_params) + tuple(params)
+            result[0] = '{} as {}'.format(
+                self._source.raw_query, self.model._meta.db_table)
+            params = tuple(self._source.params) + tuple(params)
             return result, params
         compiler.get_from_clause = get_from_clause_wrapper
 
         return compiler
 
 
-class FacadeModelQuerySet(models.QuerySet):
-    def __init__(self, *args, query=None, source_raw=None,
-                 source_params=[], source_translations=None,
-                 source_null_fields=None, **kwargs) -> None:
+class RawSugarQuerySet(models.QuerySet):
+    def __init__(self, *args, query=None, _source=None, **kwargs) -> None:
         empty_query = query is None
         r = super().__init__(*args, query=query, **kwargs)
         if empty_query:
-            self.query = FacadeModelQuery(
+            self.query = RawSugarQuery(
                 self.model,
-                source_raw=source_raw,
-                source_params=source_params,
-                source_translations=source_translations,
-                source_null_fields=source_null_fields)
+                _source=_source)
         return r
 
 
-class RawFacadeManager(models.Manager):
-    def __call__(self, raw_query, params=None, translations=None, null_fields=None):
-        self._source_raw = raw_query
-        self._source_params = params
-        self._source_translations = translations
-        self._source_null_fields = null_fields
+class _RawSugarSourcedManager(models.Manager):
+    def __init__(self, *args, _source_func=None, _source_func_is_callable=False,
+                 _set_source_func_on_next_call=False, **kwargs) -> None:
+        self._source_func = _source_func
+        if not _source_func_is_callable:
+            assert callable(self._source_func)
+        self._source_func_is_callable = _source_func_is_callable
+        self._set_source_func_on_next_call = _set_source_func_on_next_call
+        self._source = None
+        return super().__init__(*args, **kwargs)
+
+    def _check_source_type(self):
+        assert isinstance(self._source, (FromRaw, FromQuerySet)), \
+            "Expected a `FromRaw` or `FromQuerySet` to be returned "\
+            "from the manager method, but received a `%s" % type(self._source)
+
+    def __call__(self, *args, **kwargs):
+        if self._set_source_func_on_next_call:
+            self._source_func = args[0]
+            assert callable(self._source_func)
+            self._set_source_func_on_next_call = False
+        elif self._source_func_is_callable:
+            self._source = self._source_func(self.model, *args, **kwargs)
+            self._check_source_type()
+        else:
+            raise TypeError
         return self
 
     def get_queryset(self):
-        if self._source_raw is None:
-            raise Exception('Source raw was not provided!')
+        if not self._source_func_is_callable:
+            self._source = self._source_func(self.model)
+            self._check_source_type()
 
-        return FacadeModelQuerySet(
-            self.model, using=self._db,
-            source_raw=self._source_raw,
-            source_params=self._source_params,
-            source_translations=self._source_translations,
-            source_null_fields=self._source_null_fields
-        )
+        if isinstance(self._source, FromQuerySet):
+            self._source._calculate_null_fields(self.model)
 
-
-class ReadOnlyRawFacadeManager(models.Manager):
-    def bulk_create(self, *args, **kwargs):
-        raise NotImplementedError
-
-    def create(self, *args, **kwargs):
-        raise NotImplementedError
-
-    def get_or_create(self, *args, **kwargs):
-        raise NotImplementedError
-
-    def delete(self, *args, **kwargs):
-        raise NotImplementedError
-
-    def update(self, *args, **kwargs):
-        raise NotImplementedError
-
-
-class QuerysetFacadeManager(RawFacadeManager):
-    def __call__(self, queryset, translations=None):
-        queryset_fields = list(queryset.query.annotations.keys())
-        if translations:
-            queryset_fields += [translations[i] for i in translations]
-        if len(queryset.query.values_select) > 0:
-            for field_name in queryset.query.values_select:
-                for field in queryset.model._meta.fields:
-                    if field.name == field_name:
-                        queryset_fields.append(field.column)
-                        break
-                else:
-                    queryset_fields.append(field_name)
-        else:
-            queryset_fields += [field.column for field in queryset.model._meta.fields]
-
-        model_fields = [f.column for f in self.model._meta.fields]
-        null_fields = list(set(model_fields) - set(queryset_fields))
-
-        source_raw, source_params = queryset.query.as_sql(
-            connection=connection, compiler=None)
-        self._source_raw = source_raw
-        self._source_params = source_params
-        self._source_translations = translations
-        self._source_null_fields = null_fields
-
-        return self
-
-    def _get_model_field(self, column):
-        for field in self.model._meta.fields:
-            if field.column == column:
-                return field
+        return RawSugarQuerySet(self.model,
+                                using=self._db,
+                                _source=self._source)
