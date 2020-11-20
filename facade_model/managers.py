@@ -2,11 +2,13 @@ from django.db import models, connection
 
 
 class FacadeModelQuery(models.sql.Query):
-    def __init__(self, *args, source_raw=None, source_params=None,
-                 source_translations=None, **kwargs):
+    def __init__(self, *args, source_raw=None,
+                 source_params=None, source_translations=None,
+                 source_null_fields=None, **kwargs):
         self._source_raw = source_raw
         self._source_params = source_params or []
         self._source_translations = source_translations or {}
+        self._source_null_fields = source_null_fields or []
 
         return super().__init__(*args, **kwargs)
 
@@ -14,21 +16,25 @@ class FacadeModelQuery(models.sql.Query):
         compiler = super().get_compiler(*args, **kwargs)
 
         get_select_method = compiler.get_select
+
         def get_select_wrapper(*args, **kwargs):
             ret, klass_info, annotations = get_select_method(*args, **kwargs)
             new_ret = []
             for ret_data in ret:
                 col, (sql, params), alias = ret_data
-                
-                sql_as = ''
-                [ sql_table_name, sql_field_name ] = sql.split('.')
+
+                [sql_table_name, sql_field_name] = sql.split('.')
                 for translation_name in self._source_translations:
-                    if '"{}"'.format(translation_name) == sql_field_name:
-                        sql_as = ' as {}'.format(sql_field_name)
-                        sql_field_name = '"{}"'.format(
-                            self._source_translations[translation_name])
-                sql = '.'.join([sql_table_name, sql_field_name])
-                sql += sql_as
+                    translation_source = self._source_translations[translation_name]
+                    if '"{}"'.format(translation_source) == sql_field_name:
+                        sql_field_name = '"{}"'.format(translation_source)
+                        sql = '.'.join([sql_table_name, translation_name])
+                        sql += ' as {}'.format(sql_field_name)
+                        break
+                for null_field in self._source_null_fields:
+                    if '"{}"'.format(null_field) == sql_field_name:
+                        sql = 'Null as {}'.format(sql_field_name)
+                        break
 
                 ret_data = col, (sql, params), alias
                 new_ret.append(ret_data)
@@ -37,6 +43,7 @@ class FacadeModelQuery(models.sql.Query):
         compiler.get_select = get_select_wrapper
 
         get_from_clause_method = compiler.get_from_clause
+
         def get_from_clause_wrapper(*args, **kwargs):
             result, params = get_from_clause_method(*args, **kwargs)
             result[0] = '({}) as {}'.format(
@@ -50,7 +57,8 @@ class FacadeModelQuery(models.sql.Query):
 
 class FacadeModelQuerySet(models.QuerySet):
     def __init__(self, *args, query=None, source_raw=None,
-                 source_params=[], source_translations=None, **kwargs) -> None:
+                 source_params=[], source_translations=None,
+                 source_null_fields=None, **kwargs) -> None:
         empty_query = query is None
         r = super().__init__(*args, query=query, **kwargs)
         if empty_query:
@@ -58,15 +66,17 @@ class FacadeModelQuerySet(models.QuerySet):
                 self.model,
                 source_raw=source_raw,
                 source_params=source_params,
-                source_translations=source_translations)
+                source_translations=source_translations,
+                source_null_fields=source_null_fields)
         return r
 
 
 class RawFacadeManager(models.Manager):
-    def __call__(self, raw_query, params=None, translations=None):
+    def __call__(self, raw_query, params=None, translations=None, null_fields=None):
         self._source_raw = raw_query
         self._source_params = params
         self._source_translations = translations
+        self._source_null_fields = null_fields
         return self
 
     def get_queryset(self):
@@ -78,6 +88,7 @@ class RawFacadeManager(models.Manager):
             source_raw=self._source_raw,
             source_params=self._source_params,
             source_translations=self._source_translations,
+            source_null_fields=self._source_null_fields
         )
 
 
@@ -115,16 +126,14 @@ class QuerysetFacadeManager(RawFacadeManager):
             queryset_fields += [field.column for field in queryset.model._meta.fields]
 
         model_fields = [f.column for f in self.model._meta.fields]
-
-        for field in set(model_fields) - set(queryset_fields):
-            queryset = queryset.annotate(
-                **{field: models.Value(None, self._get_model_field(field))})
+        null_fields = list(set(model_fields) - set(queryset_fields))
 
         source_raw, source_params = queryset.query.as_sql(
             connection=connection, compiler=None)
         self._source_raw = source_raw
         self._source_params = source_params
         self._source_translations = translations
+        self._source_null_fields = null_fields
 
         return self
 
