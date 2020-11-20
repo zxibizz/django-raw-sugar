@@ -12,6 +12,7 @@ class RawSugarQuery(models.sql.Query):
         compiler = super().get_compiler(*args, **kwargs)
 
         get_select_method = compiler.get_select
+
         def get_select_wrapper(*args, **kwargs):
             ret, klass_info, annotations = get_select_method(*args, **kwargs)
             new_ret = []
@@ -38,6 +39,7 @@ class RawSugarQuery(models.sql.Query):
         compiler.get_select = get_select_wrapper
 
         get_from_clause_method = compiler.get_from_clause
+
         def get_from_clause_wrapper(*args, **kwargs):
             result, params = get_from_clause_method(*args, **kwargs)
             result[0] = '{} as {}'.format(
@@ -60,9 +62,9 @@ class RawSugarQuerySet(models.QuerySet):
         return r
 
 
-class _RawSugarSourcedManager(models.Manager):
+class _RawSugarDecoratedManager(models.Manager):
     def __init__(self, *args, _source_func=None, _source_func_is_callable=False,
-                 _set_source_func_on_next_call=False, **kwargs) -> None:
+                 _set_source_func_on_next_call=False, **kwargs):
         self._source_func = _source_func
         if not _source_func_is_callable:
             assert callable(self._source_func)
@@ -99,3 +101,38 @@ class _RawSugarSourcedManager(models.Manager):
         return RawSugarQuerySet(self.model,
                                 using=self._db,
                                 _source=self._source)
+
+
+class RawSugarManager(models.Manager):
+    def __init__(self, *args, source=None, **kwargs):
+        if source is not None:
+            assert isinstance(source, FromRaw), \
+                "Expected a `FromRaw` to be passed "\
+                "as a source, but received a `%s" % type(source)
+        self._source = source
+        return super().__init__(*args, **kwargs)
+
+    def get_queryset(self):
+        assert isinstance(self._source, FromRaw), \
+            "Source was not provided! "\
+            "Provide source during initialization or "\
+            "use .from_raw or .from_queryset instead."
+        return RawSugarQuerySet(self.model,
+                                using=self._db,
+                                _source=self._source)
+
+    def from_raw(self, raw_query=None, params=[],
+                 translations={}, null_fields=[],
+                 db_table=None):
+        source = FromRaw(raw_query, params, translations,
+                         null_fields, db_table)
+        return RawSugarQuerySet(self.model,
+                                using=self._db,
+                                _source=source)
+
+    def from_queryset(self, queryset, translations={}):
+        source = FromQuerySet(queryset, translations)
+        source._calculate_null_fields(self.model)
+        return RawSugarQuerySet(self.model,
+                                using=self._db,
+                                _source=source)
