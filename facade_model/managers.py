@@ -104,12 +104,12 @@ class _RawSugarDecoratedManager(models.Manager):
 
 
 class RawSugarManager(models.Manager):
-    def __init__(self, *args, source=None, **kwargs):
-        if source is not None:
-            assert isinstance(source, FromRaw), \
+    def __init__(self, from=None, *args, **kwargs):
+        if from is not None:
+            assert isinstance(from, FromRaw), \
                 "Expected a `FromRaw` to be passed "\
-                "as a source, but received a `%s" % type(source)
-        self._source = source
+                "to 'from', but received a `%s" % type(from)
+        self._source = from
         return super().__init__(*args, **kwargs)
 
     def get_queryset(self):
