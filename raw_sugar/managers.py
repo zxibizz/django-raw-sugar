@@ -104,12 +104,12 @@ class _DecoratedRawManager(models.Manager):
 
 
 class RawManager(models.Manager):
-    def __init__(self, from=None, *args, **kwargs):
-        if from is not None:
-            assert isinstance(from, FromRaw), \
+    def __init__(self, from_raw=None, *args, **kwargs):
+        if from_raw is not None:
+            assert isinstance(from_raw, FromRaw), \
                 "Expected a `FromRaw` to be passed "\
-                "to 'from', but received a `%s" % type(from)
-        self._source = from
+                "to 'from', but received a `%s" % type(from_raw)
+        self._source = from_raw
         return super().__init__(*args, **kwargs)
 
     def get_queryset(self):
