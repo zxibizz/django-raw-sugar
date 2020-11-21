@@ -103,7 +103,7 @@ class _RawSugarDecoratedManager(models.Manager):
                                 _source=self._source)
 
 
-class RawSugarManager(models.Manager):
+class RawManager(models.Manager):
     def __init__(self, from=None, *args, **kwargs):
         if from is not None:
             assert isinstance(from, FromRaw), \

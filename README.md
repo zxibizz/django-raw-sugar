@@ -16,7 +16,7 @@ Inherit your models from `FacadeModel` instead of `models.Model` (or `ReadOnlyFa
 # models.py
 from django.db import models
 
-from facade_model.models import FacadeModel, ReadOnlyFacadeModel
+from raw_sugar.models import FacadeModel, ReadOnlyFacadeModel
 
 class MySimpleModel(FacadeModel): # or ReadOnlyFacadeModel
     name = models.TextField()
@@ -44,8 +44,8 @@ print(queryset[0].name) # "my str"
 You can define a model manager that uses your raw sql to query result:
 
 ```python
-from facade_model.models import FacadeModel
-from facade_model.decorators import manager_from_raw
+from raw_sugar.models import FacadeModel
+from raw_sugar.decorators import manager_from_raw
 
 class MySimpleModel(FacadeModel):
     name = models.TextField()
@@ -75,8 +75,8 @@ You can do even more, and pass extra parameters to the manager:
 
 ```python
 
-from facade_model.models import FacadeModel
-from facade_model.decorators import manager_from_raw
+from raw_sugar.models import FacadeModel
+from raw_sugar.decorators import manager_from_raw
 
 class MySimpleModel(FacadeModel):
     name = models.TextField()

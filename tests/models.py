@@ -1,6 +1,6 @@
 from django.db import models
-from facade_model.models import FacadeModel, ReadOnlyFacadeModel
-from facade_model.decorators import manager_from_queryset, manager_from_raw
+from raw_sugar.models import FacadeModel, ReadOnlyFacadeModel
+from raw_sugar.decorators import manager_from_queryset, manager_from_raw
 
 
 class TestModelMixin(models.Model):
