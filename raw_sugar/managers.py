@@ -59,6 +59,7 @@ class _DecoratedRawManager(models.Manager):
             self._source_func = args[0]
             assert callable(self._source_func)
             self._set_source_func_on_next_call = False
+            return self
         elif self._source_func_is_callable:
             self._source = self._source_func(self.model, *args, **kwargs)
             self._check_source_type()
