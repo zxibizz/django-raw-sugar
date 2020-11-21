@@ -1,65 +1,41 @@
 from django.db import models
+from .query import _RawQuerySet
 from .sources import FromRaw, FromQuerySet
 
 
-class _RawQuery(models.sql.Query):
-    def __init__(self, *args, _source=None, **kwargs):
-        self._source = _source
-
+class RawManager(models.Manager):
+    def __init__(self, from_raw=None, *args, **kwargs):
+        if from_raw is not None:
+            assert isinstance(from_raw, FromRaw), \
+                "Expected a `FromRaw` to be passed "\
+                "to 'from_raw', but received a `%s" % type(from_raw)
+        self._source = from_raw
         return super().__init__(*args, **kwargs)
 
-    def get_compiler(self, *args, **kwargs):
-        compiler = super().get_compiler(*args, **kwargs)
+    def get_queryset(self):
+        assert isinstance(self._source, FromRaw), \
+            "Source was not provided! "\
+            "Provide source during initialization or "\
+            "use .from_raw or .from_queryset instead."
+        return _RawQuerySet(self.model,
+                            using=self._db,
+                            _source=self._source)
 
-        get_select_method = compiler.get_select
+    def from_raw(self, raw_query=None, params=[],
+                 translations={}, null_fields=[],
+                 db_table=None):
+        source = FromRaw(raw_query, params, translations,
+                         null_fields, db_table)
+        return _RawQuerySet(self.model,
+                            using=self._db,
+                            _source=source)
 
-        def get_select_wrapper(*args, **kwargs):
-            ret, klass_info, annotations = get_select_method(*args, **kwargs)
-            new_ret = []
-            for ret_data in ret:
-                col, (sql, params), alias = ret_data
-
-                [sql_table_name, sql_field_name] = sql.split('.')
-                for translation_name in self._source.translations:
-                    translation_source = self._source.translations[translation_name]
-                    if '"{}"'.format(translation_source) == sql_field_name:
-                        sql_field_name = '"{}"'.format(translation_source)
-                        sql = '.'.join([sql_table_name, translation_name])
-                        sql += ' as {}'.format(sql_field_name)
-                        break
-                for null_field in self._source.null_fields:
-                    if '"{}"'.format(null_field) == sql_field_name:
-                        sql = 'Null as {}'.format(sql_field_name)
-                        break
-
-                ret_data = col, (sql, params), alias
-                new_ret.append(ret_data)
-
-            return new_ret, klass_info, annotations
-        compiler.get_select = get_select_wrapper
-
-        get_from_clause_method = compiler.get_from_clause
-
-        def get_from_clause_wrapper(*args, **kwargs):
-            result, params = get_from_clause_method(*args, **kwargs)
-            result[0] = '{} as {}'.format(
-                self._source.raw_query, self.model._meta.db_table)
-            params = tuple(self._source.params) + tuple(params)
-            return result, params
-        compiler.get_from_clause = get_from_clause_wrapper
-
-        return compiler
-
-
-class _RawQuerySet(models.QuerySet):
-    def __init__(self, *args, query=None, _source=None, **kwargs) -> None:
-        empty_query = query is None
-        r = super().__init__(*args, query=query, **kwargs)
-        if empty_query:
-            self.query = _RawQuery(
-                self.model,
-                _source=_source)
-        return r
+    def from_queryset(self, queryset, translations={}):
+        source = FromQuerySet(queryset, translations)
+        source._calculate_null_fields(self.model)
+        return _RawQuerySet(self.model,
+                            using=self._db,
+                            _source=source)
 
 
 class _DecoratedRawManager(models.Manager):
@@ -88,7 +64,7 @@ class _DecoratedRawManager(models.Manager):
             self._check_source_type()
         else:
             raise TypeError
-        return self
+        return self.get_queryset()
 
     def get_queryset(self):
         if not self._source_func_is_callable:
@@ -103,36 +79,11 @@ class _DecoratedRawManager(models.Manager):
                                 _source=self._source)
 
 
-class RawManager(models.Manager):
-    def __init__(self, from_raw=None, *args, **kwargs):
-        if from_raw is not None:
-            assert isinstance(from_raw, FromRaw), \
-                "Expected a `FromRaw` to be passed "\
-                "to 'from', but received a `%s" % type(from_raw)
-        self._source = from_raw
-        return super().__init__(*args, **kwargs)
-
-    def get_queryset(self):
-        assert isinstance(self._source, FromRaw), \
-            "Source was not provided! "\
-            "Provide source during initialization or "\
-            "use .from_raw or .from_queryset instead."
-        return _RawQuerySet(self.model,
-                                using=self._db,
-                                _source=self._source)
-
-    def from_raw(self, raw_query=None, params=[],
-                 translations={}, null_fields=[],
-                 db_table=None):
-        source = FromRaw(raw_query, params, translations,
-                         null_fields, db_table)
-        return _RawQuerySet(self.model,
-                                using=self._db,
-                                _source=source)
-
-    def from_queryset(self, queryset, translations={}):
-        source = FromQuerySet(queryset, translations)
-        source._calculate_null_fields(self.model)
-        return _RawQuerySet(self.model,
-                                using=self._db,
-                                _source=source)
+def raw_manager(is_callable=False):
+    if callable(is_callable):
+        return _DecoratedRawManager(_source_func=is_callable)
+    if is_callable:
+        return _DecoratedRawManager(_set_source_func_on_next_call=True,
+                                    _source_func_is_callable=True)
+    else:
+        return _DecoratedRawManager(_set_source_func_on_next_call=True)
