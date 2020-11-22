@@ -1,6 +1,5 @@
 from django.db import models
-from raw_sugar.models import FacadeModel, ReadOnlyFacadeModel
-from raw_sugar.decorators import manager_from_queryset, manager_from_raw
+from raw_sugar import raw_manager, RawManager, FromRaw, FromQuerySet
 
 
 class TestModelMixin(models.Model):
@@ -20,41 +19,46 @@ class AnotherDjangoModel(TestModelMixin):
     number = models.IntegerField()
 
 
-class TestFacadeModel(ReadOnlyFacadeModel):
+class TestFacadeModel(TestModelMixin):
     target = models.ForeignKey(DjangoModel, models.CASCADE, related_name='+')
     text = models.CharField(max_length=100)
     sum_text = models.CharField(max_length=200)
     number = models.IntegerField()
     diff_number = models.IntegerField()
 
-    @manager_from_raw
+    @raw_manager
     def raw_objects(cls):
         return ''
 
-    @manager_from_queryset
+    @raw_manager
     def queryset_objects(cls):
         return AnotherDjangoModel.objects.all()
 
-    @manager_from_raw(is_method=True)
+    @raw_manager(is_callable=True)
     def callable_queryset_objects(cls, *args, **kwargs):
         return ''
 
-    @manager_from_queryset(is_method=True)
+    @raw_manager(is_callable=True)
     def callable_raw_objects(cls, *args, **kwargs):
         return AnotherDjangoModel.objects.all()
 
     class Meta:
-        app_label = 'tests'
+        managed = False
 
 
-class MySimpleModel(FacadeModel):
+class MySimpleModel(TestModelMixin):
     name = models.TextField()
     number = models.IntegerField()
 
-    @manager_from_raw
-    def my_raw_source(cls):
-        return 'SELECT Null as id, "my str" as name, 111 as number, 1 as source_id'
+    objects = RawManager()
 
-    @manager_from_raw(is_method=True)
+    @raw_manager
+    def my_raw_source(cls):
+        return FromRaw('SELECT Null as id, "my str" as name, 111 as number, 1 as source_id')
+
+    @raw_manager(is_callable=True)
     def my_callable_raw_source(cls, name, number):
-        return f'SELECT Null as id, "{name}" as name, {number} as number, 1 as source_id'
+        return FromRaw(f'SELECT Null as id, "{name}" as name, {number} as number, 1 as source_id')
+
+    class Meta:
+        managed = False
