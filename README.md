@@ -118,3 +118,11 @@ If you have a sql view or a sql table function in your database and want to quer
 queryset = MySimpleModel.objects.from_raw(db_table='my_view')
 queryset = MySimpleModel.objects.from_raw(db_table='my_func(%s, %s)', params=['param', 1])
 ```
+
+## Differences with `Manager.raw()`
+Pros:
+ - The result of executing of your raw sql is a **QuerySet** (!!!), and can filter, order, union, etc. it.
+
+Cons:
+ - Your raw sql must contain all fields of target model, including foreign keys. If you'll omit one, you get an `OperationalError('no such column: ...')`
+ - If you queried `Null` as the value of a field, this field won't be queried when accessing it from the model instance.
