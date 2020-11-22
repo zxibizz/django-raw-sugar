@@ -4,14 +4,19 @@ from setuptools import setup, find_packages
 # allow setup.py to be run from any path
 os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
+with open("README.md", 'r') as f:
+    long_description = f.read()
+    print(long_description)
+
 setup(
     name='django-raw-sugar',
-    version='0.1.9',
+    version='0.1.11',
     packages=find_packages(),
-    setup_requires=['setuptools-markdown'],
     include_package_data=True,
     license='MIT',
-    description='A package that provides functionality to create a django models with dynamic source (either from raw sql or django queryset)',
+    description='Turns your raw sql into a QuerySet',
+    long_description=long_description,
+    long_description_content_type='text/markdown',
     url='https://github.com/zxibizz/django-raw-sugar',
     author='Roman Lee',
     author_email='romanlee1996@gmail.com',
