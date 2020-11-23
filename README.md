@@ -58,9 +58,8 @@ If you need to perform parameterized queries, you can use the `params` argument:
 ```python
 queryset = MySimpleModel.objects.from_raw(
     'SELECT "%s" as name, 111 as number', 
-    params=['my str']
-    null_fields=['id', 'source_id']
-)
+    params=['my str'],
+    null_fields=['id', 'source_id'])
 ```
 ### Using transtalions
 If the field names of queried table differ from the model field names, you can map fields using the `translations` argument:
@@ -69,8 +68,7 @@ queryset = MySimpleModel.objects.from_raw(
     'SELECT "%s" as name, 111 as inner_number', 
     params=['my str'],
     translations={'inner_number': 'number'},
-    null_fields=['id', 'source_id']
-)
+    null_fields=['id', 'source_id'])
 ```
 
 ### Default raw sql
@@ -78,24 +76,24 @@ You can define a model manager that uses your raw sql as query source by default
 
 ```python
 from django.db import models
-from raw_sugar import raw_manager, FromRaw
+from raw_sugar import raw_manager, RawManager, FromRaw
 
 class MySimpleModel(models.model):
     name = models.TextField()
     number = models.IntegerField()
     source = models.ForeignKey(AnotherSimpleModel, models.DO_NOTHING)
 
-    my_raw_manager = RawManager(FromRaw('"my str" as name, 111 as number',
+    my_raw_manager = RawManager(FromRaw('SELECT "my str" as name, 111 as number',
                                         null_fields=['id', 'source_id']))
 
     @raw_manager
-    def my_raw_source_2(cls):
-        return FromRaw('"my str" as name, 111 as number',
+    def my_raw_manager_2(cls):
+        return FromRaw('SELECT "my str" as name, 111 as number',
                        null_fields=['id', 'source_id'])
 
     @raw_manager(is_callable=True)
-    def my_callable_raw_source(cls, name=""):
-        return FromRaw('SELECT Null as id, %s as name, 111 as number',
+    def my_callable_raw_manager(cls, name=""):
+        return FromRaw('SELECT %s as name, 111 as number',
                        null_fields=['id', 'source_id'],
                        params=[name])
 
