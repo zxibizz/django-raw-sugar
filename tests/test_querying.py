@@ -1,51 +1,175 @@
 from django.test import TestCase
-from .models import (
-    DjangoModel, AnotherDjangoModel,
-    TestFacadeModel, MySimpleModel
-)
+from .models import MySimpleModel, AnotherSimpleModel
 
 
 class DynamicQueringTest(TestCase):
     def setUp(self):
-        djm1 = DjangoModel.objects.create(text='django model 1', number=1)
-        djm2 = DjangoModel.objects.create(text='django model 2', number=2)
-        adjm1 = AnotherDjangoModel.objects.create(
-            text='another django model 1', number=11, target=djm1)
-        adjm2 = AnotherDjangoModel.objects.create(
-            text='another django model 2', number=21, target=djm2)
+        asm1 = AnotherSimpleModel.objects.create()
+        asm2 = AnotherSimpleModel.objects.create()
+        msm1 = MySimpleModel.objects.create(
+            name='django model 1', number=1, source=asm1)
+        msm2 = MySimpleModel.objects.create(
+            name='django model 2', number=2, source=asm2)
 
-    # def test_queryset(self):
-    #     qs = TestFacadeModel.from_queryset(
-    #         AnotherDjangoModel.objects.all()
-    #     ).all()
-    #     self.assertTrue(len(qs) == 2)
+    def test_readme_example_0(self):
+        queryset = MySimpleModel.objects.all().order_by('id')
 
-    def test_from_raw(self):
-        AnotherDjangoModel.objects.raw(
-            'SELECT Null as id, "my str" as f1, 111 as number', translations={'f1': 'name'})[0]
+        self.assertTrue(queryset.count() == 2)
 
+        res = queryset[0]
+
+        self.assertTrue(res.name == 'django model 1')
+        self.assertTrue(res.number == 1)
+        self.assertTrue(res.source_id == 1)
+
+    def test_readme_example_1(self):
         queryset = MySimpleModel.objects.from_raw(
-            'SELECT Null as id, "my str" as name, 111 as number').all()
+            'SELECT Null as id, "my str" as name, 111 as number, Null as source_id')
+
+        queryset = queryset.filter(number__gte=10)\
+            .exclude(number__gte=1000)\
+            .filter(name__contains='s')\
+            .order_by('number')\
+            .select_related('source')
+
+        res = queryset[0]
+
+        self.assertTrue(res.name == 'my str')
+        self.assertTrue(res.number == 111)
+
+    def test_readme_example_2(self):
+        queryset = MySimpleModel.objects.from_raw(
+            'SELECT "my str" as name, 111 as number', null_fields=['id', 'source_id'])
+
+        queryset = queryset.filter(number__gte=10)\
+            .exclude(number__gte=1000)\
+            .filter(name__contains='s')\
+            .order_by('number')\
+            .select_related('source')
+
+        res = queryset[0]
+
+        self.assertTrue(res.name == 'my str')
+        self.assertTrue(res.number == 111)
+
+    def test_readme_example_3(self):
+        queryset = MySimpleModel.objects.from_raw(
+            'SELECT %s as name, 111 as number',
+            params=['my str'],
+            null_fields=['id', 'source_id'])
+
         queryset = queryset.filter(number__gte=10)\
             .exclude(number__gte=1000)\
             .filter(name__contains='s')\
             .order_by('number')
+
         res = queryset[0]
+
         self.assertTrue(res.name == 'my str')
         self.assertTrue(res.number == 111)
 
-    def test_source(self):
-        queryset = MySimpleModel.my_raw_source.all()
+    def test_readme_example_4(self):
+        queryset = MySimpleModel.objects.from_raw(
+            'SELECT %s as name, 111 as inner_number',
+            params=['my str'],
+            translations={'inner_number': 'number'},
+            null_fields=['id', 'source_id'])
+
         queryset = queryset.filter(number__gte=10)\
             .exclude(number__gte=1000)\
             .filter(name__contains='s')\
             .order_by('number')
+
         res = queryset[0]
+
         self.assertTrue(res.name == 'my str')
         self.assertTrue(res.number == 111)
 
-    def test_callable_source(self):
-        queryset = MySimpleModel.my_callable_raw_source('my param', 111).all()
+    def test_readme_example_5(self):
+        queryset = MySimpleModel.my_raw_manager.all()
+
+        queryset = queryset.filter(number__gte=10)\
+            .exclude(number__gte=1000)\
+            .filter(name__contains='s')\
+            .order_by('number')
+
         res = queryset[0]
-        self.assertTrue(res.name == 'my param')
+
+        self.assertTrue(res.name == 'my str')
         self.assertTrue(res.number == 111)
+
+    def test_readme_example_6(self):
+        queryset = MySimpleModel.my_raw_manager_2.all()
+
+        queryset = queryset.filter(number__gte=10)\
+            .exclude(number__gte=1000)\
+            .filter(name__contains='s')\
+            .order_by('number')
+
+        res = queryset[0]
+
+        self.assertTrue(res.name == 'my str')
+        self.assertTrue(res.number == 111)
+
+    def test_readme_example_7(self):
+        queryset = MySimpleModel.my_callable_raw_manager('my str').all()
+
+        queryset = queryset.filter(number__gte=10)\
+            .exclude(number__gte=1000)\
+            .filter(name__contains='s')\
+            .order_by('number')
+
+        res = queryset[0]
+
+        self.assertTrue(res.name == 'my str')
+        self.assertTrue(res.number == 111)
+
+    def test_decorated_manager_from_1(self):
+        queryset = MySimpleModel.my_raw_manager_2.from_raw(
+            'SELECT %s as name, 111 as inner_number',
+            params=['my str'],
+            translations={'inner_number': 'number'},
+            null_fields=['id', 'source_id'])
+
+        queryset = queryset.filter(number__gte=10)\
+            .exclude(number__gte=1000)\
+            .filter(name__contains='s')\
+            .order_by('number')
+
+        res = queryset[0]
+
+        self.assertTrue(res.name == 'my str')
+        self.assertTrue(res.number == 111)
+
+    def test_decorated_manager_from_2(self):
+        queryset = MySimpleModel.my_callable_raw_manager.from_raw(
+            'SELECT %s as name, 111 as inner_number',
+            params=['my str'],
+            translations={'inner_number': 'number'},
+            null_fields=['id', 'source_id'])
+
+        queryset = queryset.filter(number__gte=10)\
+            .exclude(number__gte=1000)\
+            .filter(name__contains='s')\
+            .order_by('number')
+
+        res = queryset[0]
+
+        self.assertTrue(res.name == 'my str')
+        self.assertTrue(res.number == 111)
+
+    def test_call_not_callable(self):
+        try:
+            MySimpleModel.my_raw_manager_2().all()
+        except TypeError:
+            return
+
+        self.assertTrue(False)
+
+    def test_query_callable_directly(self):
+        try:
+            MySimpleModel.my_callable_raw_manager.all()
+        except TypeError:
+            return
+
+        self.assertTrue(False)
