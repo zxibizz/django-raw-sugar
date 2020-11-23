@@ -15,8 +15,8 @@ class RawSugarQuery(models.sql.Query):
             result, params = get_from_clause_method(*args, **kwargs)
             if len(self._source.translations) > 0 or len(self._source.null_fields) > 0:
                 select_fields = []
-                for (col, col_sql, alias) in compiler.select:
-                    field_name = col.target.column
+                for col in self.model._meta.fields:
+                    field_name = col.column
                     if not field_name in self._source.translations.values()\
                             and not field_name in self._source.null_fields:
                         select_fields.append('{}.{}'.format(
