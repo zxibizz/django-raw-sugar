@@ -14,14 +14,24 @@ class RawSugarQuery(models.sql.Query):
             qn = compiler.connection.ops.quote_name
             result, params = get_from_clause_method(*args, **kwargs)
             if len(self._source.translations) > 0 or len(self._source.null_fields) > 0:
-                wrapper_fields = []
-                for left, right in self._source.translations.items():
-                    wrapper_fields.append(
-                        '{}.{} AS {}'.format(qn('wrapper_table'),  qn(left), qn(right)))
+                select_fields = []
+                for (col, col_sql, alias) in compiler.select:
+                    field_name = col.target.column
+                    if not field_name in self._source.translations.values()\
+                            and not field_name in self._source.null_fields:
+                        select_fields.append('{}.{}'.format(
+                            qn('wrapper_table'),
+                            qn(field_name)))
                 for null_field in self._source.null_fields:
-                    wrapper_fields.append('NULL AS {}'.format(qn(null_field)))
-                wrapper = '(SELECT *, {} FROM {} AS {})'.format(
-                    ','.join(wrapper_fields),
+                    select_fields.append('NULL AS {}'.format(
+                        qn(null_field)))
+                for translation_field in self._source.translations.items():
+                    select_fields.append('{}.{} AS {}'.format(
+                        qn('wrapper_table'),
+                        qn(translation_field[0]),
+                        qn(translation_field[1])))
+                wrapper = '(SELECT {} FROM {} AS {})'.format(
+                    ', '.join(select_fields),
                     self._source.raw_query,
                     qn('wrapper_table'))
             else:
