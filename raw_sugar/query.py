@@ -13,6 +13,7 @@ class RawSugarQuery(models.sql.Query):
         def get_from_clause_wrapper(*args, **kwargs):
             qn = compiler.connection.ops.quote_name
             result, params = get_from_clause_method(*args, **kwargs)
+            assert result[0] == qn(self.model._meta.db_table)
             if len(self._source.translations) > 0 or len(self._source.null_fields) > 0:
                 select_fields = []
                 for col in self.model._meta.fields:
