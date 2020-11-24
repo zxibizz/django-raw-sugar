@@ -23,7 +23,7 @@ class MySimpleModel(models.Model):
                        null_fields=['id', 'source_id'])
 
     @raw_manager(is_callable=True)
-    def my_callable_raw_manager(cls, name=""):
+    def my_callable_raw_manager(cls, name):
         return FromRaw('SELECT %s as name, 111 as number',
                        null_fields=['id', 'source_id'],
                        params=[name])

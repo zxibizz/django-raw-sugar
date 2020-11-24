@@ -168,8 +168,39 @@ class DynamicQueringTest(TestCase):
 
     def test_query_callable_directly(self):
         try:
-            MySimpleModel.my_callable_raw_manager.all()
+            MySimpleModel.my_callable_raw_manager.all()[0]
         except TypeError:
             return
 
         self.assertTrue(False)
+
+    def test_deferred_params_1(self):
+        queryset = MySimpleModel.my_callable_raw_manager.all()\
+            .with_params('my str')
+
+        queryset = queryset.filter(number__gte=10)\
+            .exclude(number__gte=1000)\
+            .filter(name__contains='s')\
+            .order_by('number')\
+            .select_related('source')
+
+        res = queryset[0]
+
+        self.assertTrue(res.name == 'my str')
+        self.assertTrue(res.number == 111)
+
+    def test_deferred_params_2(self):
+        queryset = MySimpleModel.objects.from_raw(
+            'SELECT Null as id, %s as name, 111 as number, Null as source_id')\
+            .with_params('my str')
+
+        queryset = queryset.filter(number__gte=10)\
+            .exclude(number__gte=1000)\
+            .filter(name__contains='s')\
+            .order_by('number')\
+            .select_related('source')
+
+        res = queryset[0]
+
+        self.assertTrue(res.name == 'my str')
+        self.assertTrue(res.number == 111)
