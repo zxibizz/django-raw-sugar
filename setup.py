@@ -10,7 +10,7 @@ with open("README.md", 'r') as f:
 
 setup(
     name='django-raw-sugar',
-    version='0.1.14',
+    version='0.1.15',
     packages=find_packages(),
     include_package_data=True,
     license='MIT',
