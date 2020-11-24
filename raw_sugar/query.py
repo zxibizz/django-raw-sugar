@@ -79,6 +79,6 @@ class RawSugarQuerySet(models.QuerySet):
 
     def with_params(self, *args, **kwargs):
         clone = self._chain()
-        clone._query._source_func_args = args
-        clone._query._source_func_kwargs = kwargs
+        clone.query._source_func_args = args
+        clone.query._source_func_kwargs = kwargs
         return clone
