@@ -1,5 +1,5 @@
 from django.db import models
-from raw_sugar import raw_manager, RawManager, FromRaw
+from raw_sugar import raw_manager, RawManager, FromRaw, FromQuerySet
 
 
 class AnotherSimpleModel(models.Model):
@@ -27,3 +27,10 @@ class MySimpleModel(models.Model):
         return FromRaw('SELECT %s as name, 111 as number',
                        null_fields=['id', 'source_id'],
                        params=[name])
+
+    @raw_manager
+    def my_qs_manager(cls):
+        return FromQuerySet(
+            cls.objects.values('source').annotate(
+                _number=models.Sum('number')),
+            translations={'_number': 'number'})

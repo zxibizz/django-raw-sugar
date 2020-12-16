@@ -6,15 +6,21 @@ class DynamicQueringTest(TestCase):
     def setUp(self):
         asm1 = AnotherSimpleModel.objects.create()
         asm2 = AnotherSimpleModel.objects.create()
-        msm1 = MySimpleModel.objects.create(
+        MySimpleModel.objects.create(
             name='django model 1', number=1, source=asm1)
-        msm2 = MySimpleModel.objects.create(
-            name='django model 2', number=2, source=asm2)
+        MySimpleModel.objects.create(
+            name='django model 2', number=2, source=asm1)
+        MySimpleModel.objects.create(
+            name='django model 3', number=3, source=asm1)
+        MySimpleModel.objects.create(
+            name='django model 4', number=4, source=asm1)
+        MySimpleModel.objects.create(
+            name='django model 5', number=5, source=asm2)
 
     def test_readme_example_0(self):
         queryset = MySimpleModel.objects.all().order_by('id')
 
-        self.assertTrue(queryset.count() == 2)
+        self.assertTrue(queryset.count() == 5)
 
         res = queryset[0]
 
@@ -204,3 +210,16 @@ class DynamicQueringTest(TestCase):
 
         self.assertTrue(res.name == 'my str')
         self.assertTrue(res.number == 111)
+
+    def test_from_queryset_1(self):
+        queryset = MySimpleModel.my_qs_manager.all()
+
+        queryset = queryset.filter(number__gte=10)\
+            .exclude(number__gte=1000)\
+            .order_by('source')\
+            .select_related('source')
+
+        res = queryset[0]
+
+        self.assertTrue(res.name is None)
+        self.assertTrue(res.number == 10)
