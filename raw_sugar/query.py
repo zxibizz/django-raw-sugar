@@ -35,19 +35,22 @@ class RawSugarQuery(Query):
                 select_fields = []
                 for col in self.model._meta.fields:
                     field_name = col.column
-                    if not field_name in source.translations.values()\
-                            and not field_name in source.null_fields:
-                        select_fields.append('{}.{}'.format(
-                            qn('wrapper_table'),
-                            qn(field_name)))
-                for null_field in source.null_fields:
-                    select_fields.append('NULL AS {}'.format(
-                        qn(null_field)))
-                for translation_field in source.translations.items():
-                    select_fields.append('{}.{} AS {}'.format(
-                        qn('wrapper_table'),
-                        qn(translation_field[0]),
-                        qn(translation_field[1])))
+                    for source_field, target_field in source.translations.items():
+                        if target_field == field_name:
+                            select_fields.append('{}.{} AS {}'.format(
+                                qn('wrapper_table'),
+                                qn(source_field),
+                                qn(target_field)))
+                            break
+                    else:
+                        if field_name in source.null_fields:
+                            select_fields.append('CAST(NULL AS {}) AS {}'.format(
+                                col.cast_db_type(compiler.connection),
+                                qn(field_name)))
+                        else:
+                            select_fields.append('{}.{}'.format(
+                                qn('wrapper_table'),
+                                qn(field_name)))
                 wrapper = '(SELECT {} FROM {} AS {})'.format(
                     ', '.join(select_fields),
                     source.raw_query,
