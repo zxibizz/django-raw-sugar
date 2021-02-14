@@ -1,6 +1,6 @@
 from django.db import models
 from .query import RawSugarQuerySet
-from .sources import SourceRaw, FromRaw, FromQuerySet
+from .sources import FromRaw, FromQuerySet
 
 
 class RawManagerMixin:
@@ -22,6 +22,14 @@ class RawManagerMixin:
                                 using=self._db,
                                 _source_func=source_func)
 
+    def with_params(self, *args):
+        def source_func(cls, *args):
+            return self._source.with_params(*args)
+        return RawSugarQuerySet(self.model,
+                                using=self._db,
+                                _source_func=source_func,
+                                _source_func_args=args)
+
 
 class RawManager(models.Manager, RawManagerMixin):
     def __init__(self, from_raw=None):
@@ -42,14 +50,6 @@ class RawManager(models.Manager, RawManagerMixin):
                                     _source_func_args=self._source.params)
         else:
             return super().get_queryset()
-
-    def with_params(self, *args):
-        def source_func(cls, *args):
-            return self._source.with_params(*args)
-        return RawSugarQuerySet(self.model,
-                                using=self._db,
-                                _source_func=source_func,
-                                _source_func_args=args)
 
 
 class DecoratedRawManager(models.Manager, RawManagerMixin):
