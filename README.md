@@ -69,7 +69,7 @@ queryset = MySimpleModel.objects.from_raw(
 queryset = queryset.with_params('my str')
 ```
 
-### Using transtalions
+### Using translations
 If the field names of queried table differ from the model field names, you can map fields by using the `translations` argument:
 ```python
 queryset = MySimpleModel.objects.from_raw(
